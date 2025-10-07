@@ -18,6 +18,7 @@ import {
   Configuration,
   CredentialsMethod,
   ErrorCode,
+  FgaApiError,
   FgaApiAuthenticationError,
   FgaApiInternalError,
   FgaApiNotFoundError,
@@ -893,6 +894,180 @@ describe("OpenFGA SDK", function () {
         expect(scope.isDone()).toBe(true);
         expect(response.objects).toHaveLength(mockedResponse.objects.length);
         expect(response.objects).toEqual(expect.arrayContaining(mockedResponse.objects));
+      });
+    });
+  });
+
+  describe("Retry-After header support", () => {
+    let fgaApi: OpenFgaApi;
+    const { storeId } = baseConfig;
+    const basePath = defaultConfiguration.getBasePath();
+
+    beforeAll(() => {
+      fgaApi = new OpenFgaApi({ ...baseConfig });
+    });
+
+    describe("Retry-After header with integer value", () => {
+      const tupleKey = {
+        user: "user:xyz",
+        relation: "viewer",
+        object: "foobar:x",
+      };
+
+      beforeEach(async () => {
+        nocks.tokenExchange(OPENFGA_API_TOKEN_ISSUER, "test-token");
+      });
+
+      afterEach(() => {
+        nock.cleanAll();
+      });
+
+      it("should honor Retry-After header with integer value on 429", async () => {
+        const startTime = Date.now();
+        
+        nock(basePath)
+          .post(`/stores/${storeId}/check`, { tuple_key: tupleKey })
+          .reply(429, { code: "rate_limit_exceeded", message: "Too many requests" }, { "Retry-After": "1" });
+
+        nocks.check(baseConfig.storeId!, tupleKey);
+
+        const response = await fgaApi.check(baseConfig.storeId!, { tuple_key: tupleKey }, { retryParams: GetDefaultRetryParams(2, 10) });
+        const elapsedTime = Date.now() - startTime;
+
+        expect(response.allowed).toBe(true);
+        // Should wait at least 1 second (1000ms) due to Retry-After header
+        expect(elapsedTime).toBeGreaterThanOrEqual(1000);
+      });
+
+      it("should honor Retry-After header with date value on 429", async () => {
+        const startTime = Date.now();
+        const retryDate = new Date(Date.now() + 1500); // 1.5 seconds from now
+        
+        nock(basePath)
+          .post(`/stores/${storeId}/check`, { tuple_key: tupleKey })
+          .reply(429, { code: "rate_limit_exceeded" }, { "Retry-After": retryDate.toUTCString() });
+
+        nocks.check(baseConfig.storeId!, tupleKey);
+
+        const response = await fgaApi.check(baseConfig.storeId!, { tuple_key: tupleKey }, { retryParams: GetDefaultRetryParams(2, 10) });
+        const elapsedTime = Date.now() - startTime;
+
+        expect(response.allowed).toBe(true);
+        // Should wait at least 1 second, allowing for processing overhead
+        expect(elapsedTime).toBeGreaterThanOrEqual(1000);
+      });
+
+      it("should honor Retry-After header on 5xx errors", async () => {
+        const startTime = Date.now();
+        
+        nock(basePath)
+          .post(`/stores/${storeId}/check`, { tuple_key: tupleKey })
+          .reply(503, { code: "service_unavailable" }, { "Retry-After": "1" });
+
+        nocks.check(baseConfig.storeId!, tupleKey);
+
+        const response = await fgaApi.check(baseConfig.storeId!, { tuple_key: tupleKey }, { retryParams: GetDefaultRetryParams(2, 10) });
+        const elapsedTime = Date.now() - startTime;
+
+        expect(response.allowed).toBe(true);
+        expect(elapsedTime).toBeGreaterThanOrEqual(1000);
+      });
+
+      it("should fallback to exponential backoff if Retry-After is invalid (too soon)", async () => {
+        const startTime = Date.now();
+        
+        nock(basePath)
+          .post(`/stores/${storeId}/check`, { tuple_key: tupleKey })
+          .reply(429, { code: "rate_limit_exceeded" }, { "Retry-After": "0" }); // Invalid: too soon
+
+        nocks.check(baseConfig.storeId!, tupleKey);
+
+        await fgaApi.check(baseConfig.storeId!, { tuple_key: tupleKey }, { retryParams: GetDefaultRetryParams(2, 10) });
+        const elapsedTime = Date.now() - startTime;
+
+        // Should use exponential backoff instead
+        expect(elapsedTime).toBeLessThan(1000);
+      });
+
+      it("should fallback to exponential backoff if Retry-After is invalid (too far)", async () => {
+        nock(basePath)
+          .post(`/stores/${storeId}/check`, { tuple_key: tupleKey })
+          .reply(429, { code: "rate_limit_exceeded" }, { "Retry-After": "2000" }); // Invalid: > 1800 seconds
+
+        nocks.check(baseConfig.storeId!, tupleKey);
+
+        await fgaApi.check(baseConfig.storeId!, { tuple_key: tupleKey }, { retryParams: GetDefaultRetryParams(2, 10) });
+        // Should succeed using exponential backoff
+      });
+
+      it("should fallback to exponential backoff if Retry-After is not present", async () => {
+        const startTime = Date.now();
+        
+        nock(basePath)
+          .post(`/stores/${storeId}/check`, { tuple_key: tupleKey })
+          .reply(429, { code: "rate_limit_exceeded" }); // No Retry-After header
+
+        nocks.check(baseConfig.storeId!, tupleKey);
+
+        await fgaApi.check(baseConfig.storeId!, { tuple_key: tupleKey }, { retryParams: GetDefaultRetryParams(2, 10) });
+        const elapsedTime = Date.now() - startTime;
+
+        // Should use exponential backoff (with minWaitInMs=10)
+        expect(elapsedTime).toBeLessThan(1000);
+      });
+
+      it("should expose Retry-After header in FgaApiRateLimitExceededError", async () => {
+        const updateBaseConfig = {
+          ...baseConfig,
+          retryParams: GetDefaultRetryParams(0, 10), // No retries
+        };
+        const testFgaApi = new OpenFgaApi({ ...updateBaseConfig });
+
+        nock(basePath)
+          .post(`/stores/${storeId}/check`, { tuple_key: tupleKey })
+          .reply(429, { code: "rate_limit_exceeded" }, { "Retry-After": "5" });
+
+        try {
+          await testFgaApi.check(baseConfig.storeId!, { tuple_key: tupleKey });
+          fail("Should have thrown FgaApiRateLimitExceededError");
+        } catch (err: any) {
+          expect(err).toBeInstanceOf(FgaApiRateLimitExceededError);
+          expect(err.retryAfter).toBe("5");
+        }
+      });
+
+      it("should expose Retry-After header in FgaApiInternalError", async () => {
+        const updateBaseConfig = {
+          ...baseConfig,
+          retryParams: GetDefaultRetryParams(0, 10), // No retries
+        };
+        const testFgaApi = new OpenFgaApi({ ...updateBaseConfig });
+
+        nock(basePath)
+          .post(`/stores/${storeId}/check`, { tuple_key: tupleKey })
+          .reply(503, { code: "service_unavailable" }, { "Retry-After": "10" });
+
+        try {
+          await testFgaApi.check(baseConfig.storeId!, { tuple_key: tupleKey });
+          fail("Should have thrown FgaApiInternalError");
+        } catch (err: any) {
+          expect(err).toBeInstanceOf(FgaApiInternalError);
+          expect(err.retryAfter).toBe("10");
+        }
+      });
+
+      it("should not retry on 501 Not Implemented", async () => {
+        nock(basePath)
+          .post(`/stores/${storeId}/check`, { tuple_key: tupleKey })
+          .reply(501, { code: "not_implemented", message: "Not implemented" });
+
+        try {
+          await fgaApi.check(baseConfig.storeId!, { tuple_key: tupleKey });
+          fail("Should have thrown FgaApiError");
+        } catch (err: any) {
+          expect(err).toBeInstanceOf(FgaApiError);
+          expect(err).not.toBeInstanceOf(FgaApiInternalError);
+        }
       });
     });
   });
