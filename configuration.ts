@@ -20,7 +20,7 @@ import { TelemetryConfig, TelemetryConfiguration } from "./telemetry/configurati
 const DEFAULT_MAX_RETRY = 3;
 
 // default minimum wait period in retry - but will backoff exponentially
-const DEFAULT_MIN_WAIT_MS = 100;
+const DEFAULT_MIN_WAIT_MS = 500;
 
 const DEFAULT_USER_AGENT = "openfga-sdk js/0.9.0";
 

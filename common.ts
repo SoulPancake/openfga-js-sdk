@@ -136,10 +136,57 @@ export type PromiseResult<T extends ObjectOrVoid> = Promise<CallResult<T>>;
 function isAxiosError(err: any): boolean {
   return err && typeof err === "object" && err.isAxiosError === true;
 }
+
+/**
+ * Parses the Retry-After header and returns the wait time in milliseconds
+ * Returns null if the header is invalid or outside acceptable range (1s to 1800s)
+ * @param retryAfter - The Retry-After header value
+ * @returns Wait time in milliseconds or null if invalid
+ */
+function parseRetryAfter(retryAfter: string | undefined): number | null {
+  if (!retryAfter) {
+    return null;
+  }
+
+  // Try parsing as integer (seconds from now)
+  const secondsMatch = retryAfter.match(/^\s*(\d+)\s*$/);
+  if (secondsMatch) {
+    const seconds = parseInt(secondsMatch[1], 10);
+    // Validate: must be between 1 and 1800 seconds (30 minutes)
+    if (seconds >= 1 && seconds <= 1800) {
+      return seconds * 1000; // Convert to milliseconds
+    }
+    return null;
+  }
+
+  // Try parsing as HTTP-date
+  try {
+    const date = new Date(retryAfter);
+    if (!isNaN(date.getTime())) {
+      const now = Date.now();
+      const waitTime = date.getTime() - now;
+      const waitSeconds = waitTime / 1000;
+      
+      // Validate: must be between 1 and 1800 seconds (30 minutes) from now
+      if (waitSeconds >= 1 && waitSeconds <= 1800) {
+        return waitTime;
+      }
+    }
+  } catch {
+    // Invalid date format, fall through to return null
+  }
+
+  return null;
+}
+
 function randomTime(loopCount: number, minWaitInMs: number): number {
   const min = Math.ceil(2 ** loopCount * minWaitInMs);
   const max = Math.ceil(2 ** (loopCount + 1) * minWaitInMs);
-  return Math.floor(Math.random() * (max - min) + min); //The maximum is exclusive and the minimum is inclusive
+  const randomWait = Math.floor(Math.random() * (max - min) + min); //The maximum is exclusive and the minimum is inclusive
+  
+  // Cap at 120 seconds (120000 ms)
+  const maxWait = 120000;
+  return Math.min(randomWait, maxWait);
 }
 
 interface WrappedAxiosResponse<R> {
@@ -175,7 +222,7 @@ export async function attemptHttpRequest<B, R>(
         throw new FgaApiAuthenticationError(err);
       } else if (status === 404) {
         throw new FgaApiNotFoundError(err);
-      } else if (status === 429 || status >= 500) {
+      } else if (status === 429 || (status >= 500 && status !== 501)) {
         if (iterationCount >= config.maxRetry) {
         // We have reached the max retry limit
         // Thus, we have no choice but to throw
@@ -185,7 +232,17 @@ export async function attemptHttpRequest<B, R>(
             throw new FgaApiInternalError(err);
           }
         }
-        await new Promise(r => setTimeout(r, randomTime(iterationCount, config.minWaitInMs)));
+        
+        // Try to parse Retry-After header
+        const retryAfterHeader = err.response?.headers?.["retry-after"];
+        const retryAfterMs = parseRetryAfter(retryAfterHeader);
+        
+        // Use Retry-After if valid, otherwise use exponential backoff
+        const waitTime = retryAfterMs !== null 
+          ? retryAfterMs 
+          : randomTime(iterationCount, config.minWaitInMs);
+        
+        await new Promise(r => setTimeout(r, waitTime));
       } else {
         throw new FgaApiError(err);
       }

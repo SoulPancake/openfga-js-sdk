@@ -165,6 +165,7 @@ const cXRateLimitReset = "x-ratelimit-reset";
 export class FgaApiRateLimitExceededError extends FgaApiError {
   name = "FgaApiRateLimitExceededError";
   public apiErrorCode?: string;
+  public retryAfter?: string;
 
   constructor(err: AxiosError, msg?: string) {
     super(err);
@@ -172,6 +173,7 @@ export class FgaApiRateLimitExceededError extends FgaApiError {
 
     const { endpointCategory } = getRequestMetadataFromPath(err.request?.path);
     const errResponseHeaders = getResponseHeaders(err);
+    this.retryAfter = errResponseHeaders["retry-after"];
     this.message = msg
       ? msg
       : `FGA API Rate Limit Error for ${this.method} ${endpointCategory}`;
@@ -187,12 +189,15 @@ export class FgaApiRateLimitExceededError extends FgaApiError {
 export class FgaApiInternalError extends FgaApiError {
   name = "FgaApiInternalError";
   public apiErrorCode: InternalErrorCode;
+  public retryAfter?: string;
 
   constructor(err: AxiosError, msg?: string) {
     // If there is a better error message, use it instead of the default error
     super(err);
     const { endpointCategory } = getRequestMetadataFromPath(err.request?.path);
     this.apiErrorCode = (err.response?.data as any)?.code;
+    const errResponseHeaders = getResponseHeaders(err);
+    this.retryAfter = errResponseHeaders["retry-after"];
 
     this.message = msg
       ? msg
