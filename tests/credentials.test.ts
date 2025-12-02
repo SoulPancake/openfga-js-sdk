@@ -14,7 +14,6 @@ import {FgaValidationError} from "../errors";
 
 // Ensure nock is active and network connections are disabled
 nock.disableNetConnect();
-nock.cleanAll();
 
 describe("Credentials", () => {
   const mockTelemetryConfig: TelemetryConfiguration = new TelemetryConfiguration({});
@@ -88,15 +87,15 @@ describe("Credentials", () => {
     ])("$description", async ({ apiTokenIssuer, expectedUrl }) => {
       const parsedUrl = new URL(expectedUrl);
 
-      // In Node.js 20 with nock v14, we MUST include explicit default ports in the nock setup
-      // because nock internally adds them to its mock registry, even though the actual
-      // HTTP request URLs don't include them
-      const defaultPort = parsedUrl.protocol === "https:" ? "443" : "80";
-      const fullBaseUrl = parsedUrl.port
+      // Match the exact pattern from tests/helpers/nocks.ts:tokenExchange
+      // which works in CI - use protocol://hostname (no port for defaults)
+      const baseUrl = parsedUrl.port
         ? `${parsedUrl.protocol}//${parsedUrl.hostname}:${parsedUrl.port}`
-        : `${parsedUrl.protocol}//${parsedUrl.hostname}:${defaultPort}`;
+        : `${parsedUrl.protocol}//${parsedUrl.hostname}`;
 
-      const scope = nock(fullBaseUrl)
+      const scope = nock(baseUrl, {
+        reqheaders: { "Content-Type": "application/x-www-form-urlencoded" }
+      })
         .post(parsedUrl.pathname + parsedUrl.search)
         .reply(200, {
           access_token: "test-token",
@@ -173,15 +172,15 @@ describe("Credentials", () => {
     ])("should normalize audience from apiTokenIssuer when using PrivateKeyJWT client credentials ($description)", async ({ apiTokenIssuer, expectedUrl, expectedAudience }) => {
       const parsedUrl = new URL(expectedUrl);
 
-      // In Node.js 20 with nock v14, we MUST include explicit default ports in the nock setup
-      // because nock internally adds them to its mock registry, even though the actual
-      // HTTP request URLs don't include them
-      const defaultPort = parsedUrl.protocol === "https:" ? "443" : "80";
-      const fullBaseUrl = parsedUrl.port
+      // Match the exact pattern from tests/helpers/nocks.ts:tokenExchange
+      // which works in CI - use protocol://hostname (no port for defaults)
+      const baseUrl = parsedUrl.port
         ? `${parsedUrl.protocol}//${parsedUrl.hostname}:${parsedUrl.port}`
-        : `${parsedUrl.protocol}//${parsedUrl.hostname}:${defaultPort}`;
+        : `${parsedUrl.protocol}//${parsedUrl.hostname}`;
 
-      const scope = nock(fullBaseUrl)
+      const scope = nock(baseUrl, {
+        reqheaders: { "Content-Type": "application/x-www-form-urlencoded" }
+      })
         .post(parsedUrl.pathname, (body: string) => {
           const params = new URLSearchParams(body);
           const clientAssertion = params.get("client_assertion") as string;
