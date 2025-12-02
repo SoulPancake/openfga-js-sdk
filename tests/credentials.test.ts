@@ -11,39 +11,12 @@ import {
 } from "./helpers/default-config";
 import {FgaValidationError} from "../errors";
 
+nock.disableNetConnect();
+
 describe("Credentials", () => {
   const mockTelemetryConfig: TelemetryConfiguration = new TelemetryConfiguration({});
 
-  beforeAll(() => {
-    // Clean up any MSW interceptors that might interfere
-    const http = require('http');
-    const https = require('https');
-
-    // Store original agents
-    const originalHttpAgent = http.globalAgent;
-    const originalHttpsAgent = https.globalAgent;
-
-    // Reset to ensure clean state
-    http.globalAgent = new http.Agent();
-    https.globalAgent = new https.Agent();
-
-    nock.cleanAll();
-    nock.restore();
-    nock.activate();
-    nock.disableNetConnect();
-  });
-
-  afterAll(() => {
-    nock.cleanAll();
-    nock.restore();
-    nock.enableNetConnect();
-  });
-
   describe("Refreshing access token", () => {
-    beforeEach(() => {
-      nock.cleanAll();
-    });
-
     afterEach(() => {
       nock.cleanAll();
     });
@@ -52,91 +25,71 @@ describe("Credentials", () => {
       {
         description: "should use default scheme and token endpoint path when apiTokenIssuer has no scheme and no path",
         apiTokenIssuer: "issuer.fga.example",
-        expectedBaseUrl: "https://issuer.fga.example",
-        expectedPath: `/${DEFAULT_TOKEN_ENDPOINT_PATH}`,
+        expectedUrl: `https://issuer.fga.example/${DEFAULT_TOKEN_ENDPOINT_PATH}`,
       },
       {
         description: "should use default token endpoint path when apiTokenIssuer has root path and no scheme",
         apiTokenIssuer: "https://issuer.fga.example/",
-        expectedBaseUrl: "https://issuer.fga.example",
-        expectedPath: `/${DEFAULT_TOKEN_ENDPOINT_PATH}`,
+        expectedUrl: `https://issuer.fga.example/${DEFAULT_TOKEN_ENDPOINT_PATH}`,
       },
       {
         description: "should preserve custom token endpoint path when provided",
         apiTokenIssuer: "https://issuer.fga.example/some_endpoint",
-        expectedBaseUrl: "https://issuer.fga.example",
-        expectedPath: "/some_endpoint",
+        expectedUrl: "https://issuer.fga.example/some_endpoint",
       },
       {
         description: "should preserve custom token endpoint path with nested path when provided",
         apiTokenIssuer: "https://issuer.fga.example/api/v1/oauth/token",
-        expectedBaseUrl: "https://issuer.fga.example",
-        expectedPath: "/api/v1/oauth/token",
+        expectedUrl: "https://issuer.fga.example/api/v1/oauth/token",
       },
       {
         description: "should add https:// prefix when apiTokenIssuer has no scheme",
         apiTokenIssuer: "issuer.fga.example/some_endpoint",
-        expectedBaseUrl: "https://issuer.fga.example",
-        expectedPath: "/some_endpoint",
+        expectedUrl: "https://issuer.fga.example/some_endpoint",
       },
       {
         description: "should preserve http:// scheme when provided",
         apiTokenIssuer: "http://issuer.fga.example/some_endpoint",
-        expectedBaseUrl: "http://issuer.fga.example",
-        expectedPath: "/some_endpoint",
+        expectedUrl: "http://issuer.fga.example/some_endpoint",
       },
       {
         description: "should use default path when apiTokenIssuer has https:// scheme but no path",
         apiTokenIssuer: "https://issuer.fga.example",
-        expectedBaseUrl: "https://issuer.fga.example",
-        expectedPath: `/${DEFAULT_TOKEN_ENDPOINT_PATH}`,
+        expectedUrl: `https://issuer.fga.example/${DEFAULT_TOKEN_ENDPOINT_PATH}`,
       },
       {
         description: "should preserve custom path with query parameters",
         apiTokenIssuer: "https://issuer.fga.example/some_endpoint?param=value",
-        expectedBaseUrl: "https://issuer.fga.example",
-        expectedPath: "/some_endpoint",
-        queryParams: { param: "value" },
+        expectedUrl: "https://issuer.fga.example/some_endpoint?param=value",
       },
       {
         description: "should preserve custom path with port number",
         apiTokenIssuer: "https://issuer.fga.example:8080/some_endpoint",
-        expectedBaseUrl: "https://issuer.fga.example:8080",
-        expectedPath: "/some_endpoint",
+        expectedUrl: "https://issuer.fga.example:8080/some_endpoint",
       },
       {
         description: "should use default path when path has multiple trailing slashes",
         apiTokenIssuer: "https://issuer.fga.example///",
-        expectedBaseUrl: "https://issuer.fga.example",
-        expectedPath: `/${DEFAULT_TOKEN_ENDPOINT_PATH}`,
+        expectedUrl: `https://issuer.fga.example/${DEFAULT_TOKEN_ENDPOINT_PATH}`,
       },
       {
         description: "should use default path when path only consists of slashes",
         apiTokenIssuer: "https://issuer.fga.example//",
-        expectedBaseUrl: "https://issuer.fga.example",
-        expectedPath: `/${DEFAULT_TOKEN_ENDPOINT_PATH}`,
+        expectedUrl: `https://issuer.fga.example/${DEFAULT_TOKEN_ENDPOINT_PATH}`,
       },
       {
         description: "should preserve custom path with consecutive/trailing slashes",
         apiTokenIssuer: "https://issuer.fga.example/oauth//token///",
-        expectedBaseUrl: "https://issuer.fga.example",
-        expectedPath: "/oauth//token///",
+        expectedUrl: "https://issuer.fga.example/oauth//token///",
       },
-    ])("$description", async ({ apiTokenIssuer, expectedBaseUrl, expectedPath, queryParams }) => {
-      const scope = queryParams
-        ? nock(expectedBaseUrl)
-          .post(expectedPath)
-          .query(queryParams)
-          .reply(200, {
-            access_token: "test-token",
-            expires_in: 300,
-          })
-        : nock(expectedBaseUrl)
-          .post(expectedPath)
-          .reply(200, {
-            access_token: "test-token",
-            expires_in: 300,
-          });
+    ])("$description", async ({ apiTokenIssuer, expectedUrl }) => {
+      const parsedUrl = new URL(expectedUrl);
+      const scope = nock(`${parsedUrl.protocol}//${parsedUrl.host}`)
+        .post(parsedUrl.pathname + parsedUrl.search)
+        .reply(200, {
+          access_token: "test-token",
+          expires_in: 300,
+        });
 
       const credentials = new Credentials(
         {
@@ -190,24 +143,25 @@ describe("Credentials", () => {
       {
         description: "HTTPS scheme",
         apiTokenIssuer: "https://issuer.fga.example/some_endpoint",
-        expectedBaseUrl: "https://issuer.fga.example",
+        expectedUrl: "https://issuer.fga.example/some_endpoint",
         expectedAudience: "https://issuer.fga.example/some_endpoint/",
       },
       {
         description: "HTTP scheme",
         apiTokenIssuer: "http://issuer.fga.example/some_endpoint",
-        expectedBaseUrl: "http://issuer.fga.example",
+        expectedUrl: "http://issuer.fga.example/some_endpoint",
         expectedAudience: "http://issuer.fga.example/some_endpoint/",
       },
       {
         description: "No scheme",
         apiTokenIssuer: "issuer.fga.example/some_endpoint",
-        expectedBaseUrl: "https://issuer.fga.example",
+        expectedUrl: "https://issuer.fga.example/some_endpoint",
         expectedAudience: "https://issuer.fga.example/some_endpoint/",
       }
-    ])("should normalize audience from apiTokenIssuer when using PrivateKeyJWT client credentials ($description)", async ({ apiTokenIssuer, expectedBaseUrl, expectedAudience }) => {
-      const scope = nock(expectedBaseUrl)
-        .post("/some_endpoint", (body: string) => {
+    ])("should normalize audience from apiTokenIssuer when using PrivateKeyJWT client credentials ($description)", async ({ apiTokenIssuer, expectedUrl, expectedAudience }) => {
+      const parsedUrl = new URL(expectedUrl);
+      const scope = nock(`${parsedUrl.protocol}//${parsedUrl.host}`)
+        .post(parsedUrl.pathname, (body: string) => {
           const params = new URLSearchParams(body);
           const clientAssertion = params.get("client_assertion") as string;
           const decoded = jose.decodeJwt(clientAssertion);
