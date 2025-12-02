@@ -85,16 +85,17 @@ describe("Credentials", () => {
     ])("$description", async ({ apiTokenIssuer, expectedUrl }) => {
       const parsedUrl = new URL(expectedUrl);
 
-      // CRITICAL: Do NOT include default ports (443 for HTTPS, 80 for HTTP) in the base URL
-      // because axios/Node.js URL.toString() omits them, but nock's interceptor sees them
-      // in the format "hostname:port/path". We need to match what the actual HTTP request uses.
+      // IMPORTANT: In Node.js 20 and earlier, nock's @mswjs/interceptors sees requests
+      // with explicit default ports (443 for HTTPS, 80 for HTTP).
+      // We must include the port in the nock base URL to match what the interceptor sees.
       let baseUrl;
       if (parsedUrl.port) {
         // Non-default port: include it
         baseUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}:${parsedUrl.port}`;
       } else {
-        // Default port: omit it to match axios behavior
-        baseUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}`;
+        // Default port: include it explicitly to match what nock's interceptor sees
+        const defaultPort = parsedUrl.protocol === "https:" ? "443" : "80";
+        baseUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}:${defaultPort}`;
       }
 
       // Extensive logging for CI debugging
@@ -203,16 +204,17 @@ describe("Credentials", () => {
     ])("should normalize audience from apiTokenIssuer when using PrivateKeyJWT client credentials ($description)", async ({ apiTokenIssuer, expectedUrl, expectedAudience }) => {
       const parsedUrl = new URL(expectedUrl);
 
-      // CRITICAL: Do NOT include default ports (443 for HTTPS, 80 for HTTP) in the base URL
-      // because axios/Node.js URL.toString() omits them, but nock's interceptor sees them
-      // in the format "hostname:port/path". We need to match what the actual HTTP request uses.
+      // IMPORTANT: In Node.js 20 and earlier, nock's @mswjs/interceptors sees requests
+      // with explicit default ports (443 for HTTPS, 80 for HTTP).
+      // We must include the port in the nock base URL to match what the interceptor sees.
       let baseUrl;
       if (parsedUrl.port) {
         // Non-default port: include it
         baseUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}:${parsedUrl.port}`;
       } else {
-        // Default port: omit it to match axios behavior
-        baseUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}`;
+        // Default port: include it explicitly to match what nock's interceptor sees
+        const defaultPort = parsedUrl.protocol === "https:" ? "443" : "80";
+        baseUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}:${defaultPort}`;
       }
 
       // Extensive logging for CI debugging
