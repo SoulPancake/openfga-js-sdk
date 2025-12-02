@@ -11,10 +11,16 @@ import {
 } from "./helpers/default-config";
 import {FgaValidationError} from "../errors";
 
-nock.disableNetConnect();
-
 describe("Credentials", () => {
   const mockTelemetryConfig: TelemetryConfiguration = new TelemetryConfiguration({});
+
+  beforeAll(() => {
+    nock.disableNetConnect();
+  });
+
+  afterAll(() => {
+    nock.enableNetConnect();
+  });
 
   describe("Refreshing access token", () => {
     afterEach(() => {
@@ -25,49 +31,49 @@ describe("Credentials", () => {
       {
         description: "should use default scheme and token endpoint path when apiTokenIssuer has no scheme and no path",
         apiTokenIssuer: "issuer.fga.example",
-        expectedBaseUrl: "https://issuer.fga.example:443",
+        expectedBaseUrl: "https://issuer.fga.example",
         expectedPath: `/${DEFAULT_TOKEN_ENDPOINT_PATH}`,
       },
       {
         description: "should use default token endpoint path when apiTokenIssuer has root path and no scheme",
         apiTokenIssuer: "https://issuer.fga.example/",
-        expectedBaseUrl: "https://issuer.fga.example:443",
+        expectedBaseUrl: "https://issuer.fga.example",
         expectedPath: `/${DEFAULT_TOKEN_ENDPOINT_PATH}`,
       },
       {
         description: "should preserve custom token endpoint path when provided",
         apiTokenIssuer: "https://issuer.fga.example/some_endpoint",
-        expectedBaseUrl: "https://issuer.fga.example:443",
+        expectedBaseUrl: "https://issuer.fga.example",
         expectedPath: "/some_endpoint",
       },
       {
         description: "should preserve custom token endpoint path with nested path when provided",
         apiTokenIssuer: "https://issuer.fga.example/api/v1/oauth/token",
-        expectedBaseUrl: "https://issuer.fga.example:443",
+        expectedBaseUrl: "https://issuer.fga.example",
         expectedPath: "/api/v1/oauth/token",
       },
       {
         description: "should add https:// prefix when apiTokenIssuer has no scheme",
         apiTokenIssuer: "issuer.fga.example/some_endpoint",
-        expectedBaseUrl: "https://issuer.fga.example:443",
+        expectedBaseUrl: "https://issuer.fga.example",
         expectedPath: "/some_endpoint",
       },
       {
         description: "should preserve http:// scheme when provided",
         apiTokenIssuer: "http://issuer.fga.example/some_endpoint",
-        expectedBaseUrl: "http://issuer.fga.example:80",
+        expectedBaseUrl: "http://issuer.fga.example",
         expectedPath: "/some_endpoint",
       },
       {
         description: "should use default path when apiTokenIssuer has https:// scheme but no path",
         apiTokenIssuer: "https://issuer.fga.example",
-        expectedBaseUrl: "https://issuer.fga.example:443",
+        expectedBaseUrl: "https://issuer.fga.example",
         expectedPath: `/${DEFAULT_TOKEN_ENDPOINT_PATH}`,
       },
       {
         description: "should preserve custom path with query parameters",
         apiTokenIssuer: "https://issuer.fga.example/some_endpoint?param=value",
-        expectedBaseUrl: "https://issuer.fga.example:443",
+        expectedBaseUrl: "https://issuer.fga.example",
         expectedPath: "/some_endpoint",
         queryParams: { param: "value" },
       },
@@ -80,19 +86,19 @@ describe("Credentials", () => {
       {
         description: "should use default path when path has multiple trailing slashes",
         apiTokenIssuer: "https://issuer.fga.example///",
-        expectedBaseUrl: "https://issuer.fga.example:443",
+        expectedBaseUrl: "https://issuer.fga.example",
         expectedPath: `/${DEFAULT_TOKEN_ENDPOINT_PATH}`,
       },
       {
         description: "should use default path when path only consists of slashes",
         apiTokenIssuer: "https://issuer.fga.example//",
-        expectedBaseUrl: "https://issuer.fga.example:443",
+        expectedBaseUrl: "https://issuer.fga.example",
         expectedPath: `/${DEFAULT_TOKEN_ENDPOINT_PATH}`,
       },
       {
         description: "should preserve custom path with consecutive/trailing slashes",
         apiTokenIssuer: "https://issuer.fga.example/oauth//token///",
-        expectedBaseUrl: "https://issuer.fga.example:443",
+        expectedBaseUrl: "https://issuer.fga.example",
         expectedPath: "/oauth//token///",
       },
     ])("$description", async ({ apiTokenIssuer, expectedBaseUrl, expectedPath, queryParams }) => {
@@ -163,19 +169,19 @@ describe("Credentials", () => {
       {
         description: "HTTPS scheme",
         apiTokenIssuer: "https://issuer.fga.example/some_endpoint",
-        expectedBaseUrl: "https://issuer.fga.example:443",
+        expectedBaseUrl: "https://issuer.fga.example",
         expectedAudience: "https://issuer.fga.example/some_endpoint/",
       },
       {
         description: "HTTP scheme",
         apiTokenIssuer: "http://issuer.fga.example/some_endpoint",
-        expectedBaseUrl: "http://issuer.fga.example:80",
+        expectedBaseUrl: "http://issuer.fga.example",
         expectedAudience: "http://issuer.fga.example/some_endpoint/",
       },
       {
         description: "No scheme",
         apiTokenIssuer: "issuer.fga.example/some_endpoint",
-        expectedBaseUrl: "https://issuer.fga.example:443",
+        expectedBaseUrl: "https://issuer.fga.example",
         expectedAudience: "https://issuer.fga.example/some_endpoint/",
       }
     ])("should normalize audience from apiTokenIssuer when using PrivateKeyJWT client credentials ($description)", async ({ apiTokenIssuer, expectedBaseUrl, expectedAudience }) => {
