@@ -84,7 +84,14 @@ describe("Credentials", () => {
       },
     ])("$description", async ({ apiTokenIssuer, expectedUrl }) => {
       const parsedUrl = new URL(expectedUrl);
-      const scope = nock(`${parsedUrl.protocol}//${parsedUrl.host}`)
+      // Use hostname instead of host to avoid port issues, then add port explicitly if non-default
+      const isDefaultPort = (parsedUrl.protocol === "https:" && parsedUrl.port === "") ||
+                            (parsedUrl.protocol === "http:" && parsedUrl.port === "");
+      const baseUrl = isDefaultPort
+        ? `${parsedUrl.protocol}//${parsedUrl.hostname}`
+        : `${parsedUrl.protocol}//${parsedUrl.hostname}:${parsedUrl.port}`;
+
+      const scope = nock(baseUrl)
         .post(parsedUrl.pathname + parsedUrl.search)
         .reply(200, {
           access_token: "test-token",
@@ -160,7 +167,14 @@ describe("Credentials", () => {
       }
     ])("should normalize audience from apiTokenIssuer when using PrivateKeyJWT client credentials ($description)", async ({ apiTokenIssuer, expectedUrl, expectedAudience }) => {
       const parsedUrl = new URL(expectedUrl);
-      const scope = nock(`${parsedUrl.protocol}//${parsedUrl.host}`)
+      // Use hostname instead of host to avoid port issues, then add port explicitly if non-default
+      const isDefaultPort = (parsedUrl.protocol === "https:" && parsedUrl.port === "") ||
+                            (parsedUrl.protocol === "http:" && parsedUrl.port === "");
+      const baseUrl = isDefaultPort
+        ? `${parsedUrl.protocol}//${parsedUrl.hostname}`
+        : `${parsedUrl.protocol}//${parsedUrl.hostname}:${parsedUrl.port}`;
+
+      const scope = nock(baseUrl)
         .post(parsedUrl.pathname, (body: string) => {
           const params = new URLSearchParams(body);
           const clientAssertion = params.get("client_assertion") as string;
