@@ -1,5 +1,6 @@
 import * as nock from "nock";
 import * as jose from "jose";
+import axios from "axios";
 import { Credentials, CredentialsMethod, DEFAULT_TOKEN_ENDPOINT_PATH } from "../credentials";
 import { AuthCredentialsConfig } from "../credentials/types";
 import { TelemetryConfiguration } from "../telemetry/configuration";
@@ -15,6 +16,11 @@ nock.disableNetConnect();
 
 describe("Credentials", () => {
   const mockTelemetryConfig: TelemetryConfiguration = new TelemetryConfiguration({});
+
+  // Create axios instance with explicit http/https adapter for nock compatibility
+  const axiosInstance = axios.create({
+    adapter: "http" // Force Node.js http/https adapter that nock can intercept
+  });
 
   describe("Refreshing access token", () => {
     afterEach(() => {
@@ -98,31 +104,12 @@ describe("Credentials", () => {
         baseUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}:${defaultPort}`;
       }
 
-      // Extensive logging for CI debugging
-      console.log("=== Token Refresh Test Debug Info ===");
-      console.log("Input apiTokenIssuer:", apiTokenIssuer);
-      console.log("Expected URL:", expectedUrl);
-      console.log("Parsed URL details:");
-      console.log("  - protocol:", parsedUrl.protocol);
-      console.log("  - hostname:", parsedUrl.hostname);
-      console.log("  - host:", parsedUrl.host);
-      console.log("  - port:", parsedUrl.port);
-      console.log("  - pathname:", parsedUrl.pathname);
-      console.log("  - search:", parsedUrl.search);
-      console.log("Nock setup:");
-      console.log("  - baseUrl:", baseUrl);
-      console.log("  - path:", parsedUrl.pathname + parsedUrl.search);
-      console.log("  - full mock URL:", baseUrl + parsedUrl.pathname + parsedUrl.search);
-      console.log("Active nock interceptors:", nock.activeMocks());
-
       const scope = nock(baseUrl)
         .post(parsedUrl.pathname + parsedUrl.search)
         .reply(200, {
           access_token: "test-token",
           expires_in: 300,
         });
-
-      console.log("Nock scope created, active mocks:", nock.activeMocks());
 
       const credentials = new Credentials(
         {
@@ -134,21 +121,11 @@ describe("Credentials", () => {
             clientSecret: OPENFGA_CLIENT_SECRET,
           },
         } as AuthCredentialsConfig,
-        undefined,
+        axiosInstance,
         mockTelemetryConfig,
       );
 
-      try {
-        await credentials.getAccessTokenHeader();
-        console.log("Request succeeded!");
-        console.log("Scope done?", scope.isDone());
-        console.log("Remaining active mocks:", nock.activeMocks());
-      } catch (error) {
-        console.error("Request failed with error:", error);
-        console.error("Nock pending mocks:", nock.pendingMocks());
-        console.error("Nock active mocks:", nock.activeMocks());
-        throw error;
-      }
+      await credentials.getAccessTokenHeader();
 
       expect(scope.isDone()).toBe(true);
     });
@@ -177,7 +154,7 @@ describe("Credentials", () => {
             clientSecret: OPENFGA_CLIENT_SECRET,
           },
         } as AuthCredentialsConfig,
-        undefined,
+        axiosInstance,
         mockTelemetryConfig,
       )).toThrow(FgaValidationError);
     });
@@ -217,30 +194,11 @@ describe("Credentials", () => {
         baseUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}:${defaultPort}`;
       }
 
-      // Extensive logging for CI debugging
-      console.log("=== PrivateKeyJWT Test Debug Info ===");
-      console.log("Input apiTokenIssuer:", apiTokenIssuer);
-      console.log("Expected URL:", expectedUrl);
-      console.log("Expected audience:", expectedAudience);
-      console.log("Parsed URL details:");
-      console.log("  - protocol:", parsedUrl.protocol);
-      console.log("  - hostname:", parsedUrl.hostname);
-      console.log("  - host:", parsedUrl.host);
-      console.log("  - port:", parsedUrl.port);
-      console.log("  - pathname:", parsedUrl.pathname);
-      console.log("Nock setup:");
-      console.log("  - baseUrl:", baseUrl);
-      console.log("  - path:", parsedUrl.pathname);
-      console.log("  - full mock URL:", baseUrl + parsedUrl.pathname);
-      console.log("Active nock interceptors:", nock.activeMocks());
-
       const scope = nock(baseUrl)
         .post(parsedUrl.pathname, (body: string) => {
-          console.log("Nock interceptor body matcher called with body:", body);
           const params = new URLSearchParams(body);
           const clientAssertion = params.get("client_assertion") as string;
           const decoded = jose.decodeJwt(clientAssertion);
-          console.log("Decoded JWT audience:", decoded.aud);
           expect(decoded.aud).toBe(`${expectedAudience}`);
           return true;
         })
@@ -248,8 +206,6 @@ describe("Credentials", () => {
           access_token: "test-token",
           expires_in: 300,
         });
-
-      console.log("Nock scope created, active mocks:", nock.activeMocks());
 
       const credentials = new Credentials(
         {
@@ -261,21 +217,11 @@ describe("Credentials", () => {
             clientAssertionSigningKey: OPENFGA_CLIENT_ASSERTION_SIGNING_KEY,
           },
         } as AuthCredentialsConfig,
-        undefined,
+        axiosInstance,
         mockTelemetryConfig,
       );
 
-      try {
-        await credentials.getAccessTokenHeader();
-        console.log("Request succeeded!");
-        console.log("Scope done?", scope.isDone());
-        console.log("Remaining active mocks:", nock.activeMocks());
-      } catch (error) {
-        console.error("Request failed with error:", error);
-        console.error("Nock pending mocks:", nock.pendingMocks());
-        console.error("Nock active mocks:", nock.activeMocks());
-        throw error;
-      }
+      await credentials.getAccessTokenHeader();
 
       expect(scope.isDone()).toBe(true);
     });

@@ -243,34 +243,16 @@ export async function attemptHttpRequest<B, R>(
 ): Promise<WrappedAxiosResponse<R> | undefined> {
   let iterationCount = 0;
 
-  // Debug logging for CI troubleshooting
-  if (process.env.NODE_ENV === "test" || process.env.CI) {
-    console.log("[attemptHttpRequest] Request config:");
-    console.log("  URL:", request.url);
-    console.log("  Method:", request.method);
-    console.log("  BaseURL:", request.baseURL);
-    console.log("  Headers:", JSON.stringify(request.headers, null, 2));
-  }
-
   do {
     iterationCount++;
     try {
       const response = await axiosInstance(request);
-
-      if (process.env.NODE_ENV === "test" || process.env.CI) {
-        console.log("[attemptHttpRequest] Request succeeded!");
-      }
 
       return {
         response: response,
         retries: iterationCount - 1,
       };
     } catch (err: any) {
-      if (process.env.NODE_ENV === "test" || process.env.CI) {
-        console.log("[attemptHttpRequest] Request failed:", err.message);
-        console.log("  Error code:", err.code);
-        console.log("  Response status:", err.response?.status);
-      }
 
       const { retryable, error } = checkIfRetryableError(err, iterationCount, config.maxRetry);
 

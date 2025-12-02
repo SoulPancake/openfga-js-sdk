@@ -176,21 +176,6 @@ export class Credentials {
       }
       const finalUrl = url.toString();
 
-      // Debug logging for CI troubleshooting
-      if (process.env.NODE_ENV === "test" || process.env.CI) {
-        console.log("[Credentials.buildApiTokenUrl] Debug info:");
-        console.log("  Input apiTokenIssuer:", apiTokenIssuer);
-        console.log("  Normalized:", normalizedApiTokenIssuer);
-        console.log("  URL object details:");
-        console.log("    - protocol:", url.protocol);
-        console.log("    - hostname:", url.hostname);
-        console.log("    - host:", url.host);
-        console.log("    - port:", url.port);
-        console.log("    - pathname:", url.pathname);
-        console.log("    - search:", url.search);
-        console.log("  Final URL (toString):", finalUrl);
-      }
-
       return finalUrl; // Query params are preserved in the URL
     } catch {
       throw new FgaValidationError(`Invalid API token issuer URL: ${normalizedApiTokenIssuer}`);
@@ -205,14 +190,6 @@ export class Credentials {
     const clientCredentials = (this.authConfig as { method: CredentialsMethod.ClientCredentials; config: ClientCredentialsConfig })?.config;
     const url = this.buildApiTokenUrl(clientCredentials.apiTokenIssuer);
     const credentialsPayload = await this.buildClientAuthenticationPayload();
-
-    // Debug logging for CI troubleshooting
-    if (process.env.NODE_ENV === "test" || process.env.CI) {
-      console.log("[Credentials.refreshAccessToken] About to make request:");
-      console.log("  URL:", url);
-      console.log("  Method: POST");
-      console.log("  Payload keys:", Object.keys(credentialsPayload));
-    }
 
     try {
       const wrappedResponse = await attemptHttpRequest<ClientSecretRequest|ClientAssertionRequest, {
