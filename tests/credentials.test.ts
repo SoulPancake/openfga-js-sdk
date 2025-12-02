@@ -84,12 +84,29 @@ describe("Credentials", () => {
       },
     ])("$description", async ({ apiTokenIssuer, expectedUrl }) => {
       const parsedUrl = new URL(expectedUrl);
-      // Use hostname instead of host to avoid port issues, then add port explicitly if non-default
-      const isDefaultPort = (parsedUrl.protocol === "https:" && parsedUrl.port === "") ||
-                            (parsedUrl.protocol === "http:" && parsedUrl.port === "");
-      const baseUrl = isDefaultPort
-        ? `${parsedUrl.protocol}//${parsedUrl.hostname}`
-        : `${parsedUrl.protocol}//${parsedUrl.hostname}:${parsedUrl.port}`;
+
+      // Nock requires explicit port matching in some environments
+      // For default ports, try matching with explicit port included
+      const defaultPort = parsedUrl.protocol === "https:" ? "443" : "80";
+      const portToUse = parsedUrl.port || defaultPort;
+      const baseUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}:${portToUse}`;
+
+      // Extensive logging for CI debugging
+      console.log("=== Token Refresh Test Debug Info ===");
+      console.log("Input apiTokenIssuer:", apiTokenIssuer);
+      console.log("Expected URL:", expectedUrl);
+      console.log("Parsed URL details:");
+      console.log("  - protocol:", parsedUrl.protocol);
+      console.log("  - hostname:", parsedUrl.hostname);
+      console.log("  - host:", parsedUrl.host);
+      console.log("  - port:", parsedUrl.port);
+      console.log("  - pathname:", parsedUrl.pathname);
+      console.log("  - search:", parsedUrl.search);
+      console.log("Nock setup:");
+      console.log("  - baseUrl:", baseUrl);
+      console.log("  - path:", parsedUrl.pathname + parsedUrl.search);
+      console.log("  - full mock URL:", baseUrl + parsedUrl.pathname + parsedUrl.search);
+      console.log("Active nock interceptors:", nock.activeMocks());
 
       const scope = nock(baseUrl)
         .post(parsedUrl.pathname + parsedUrl.search)
@@ -97,6 +114,8 @@ describe("Credentials", () => {
           access_token: "test-token",
           expires_in: 300,
         });
+
+      console.log("Nock scope created, active mocks:", nock.activeMocks());
 
       const credentials = new Credentials(
         {
@@ -112,7 +131,17 @@ describe("Credentials", () => {
         mockTelemetryConfig,
       );
 
-      await credentials.getAccessTokenHeader();
+      try {
+        await credentials.getAccessTokenHeader();
+        console.log("Request succeeded!");
+        console.log("Scope done?", scope.isDone());
+        console.log("Remaining active mocks:", nock.activeMocks());
+      } catch (error) {
+        console.error("Request failed with error:", error);
+        console.error("Nock pending mocks:", nock.pendingMocks());
+        console.error("Nock active mocks:", nock.activeMocks());
+        throw error;
+      }
 
       expect(scope.isDone()).toBe(true);
     });
@@ -167,18 +196,37 @@ describe("Credentials", () => {
       }
     ])("should normalize audience from apiTokenIssuer when using PrivateKeyJWT client credentials ($description)", async ({ apiTokenIssuer, expectedUrl, expectedAudience }) => {
       const parsedUrl = new URL(expectedUrl);
-      // Use hostname instead of host to avoid port issues, then add port explicitly if non-default
-      const isDefaultPort = (parsedUrl.protocol === "https:" && parsedUrl.port === "") ||
-                            (parsedUrl.protocol === "http:" && parsedUrl.port === "");
-      const baseUrl = isDefaultPort
-        ? `${parsedUrl.protocol}//${parsedUrl.hostname}`
-        : `${parsedUrl.protocol}//${parsedUrl.hostname}:${parsedUrl.port}`;
+
+      // Nock requires explicit port matching in some environments
+      // For default ports, try matching with explicit port included
+      const defaultPort = parsedUrl.protocol === "https:" ? "443" : "80";
+      const portToUse = parsedUrl.port || defaultPort;
+      const baseUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}:${portToUse}`;
+
+      // Extensive logging for CI debugging
+      console.log("=== PrivateKeyJWT Test Debug Info ===");
+      console.log("Input apiTokenIssuer:", apiTokenIssuer);
+      console.log("Expected URL:", expectedUrl);
+      console.log("Expected audience:", expectedAudience);
+      console.log("Parsed URL details:");
+      console.log("  - protocol:", parsedUrl.protocol);
+      console.log("  - hostname:", parsedUrl.hostname);
+      console.log("  - host:", parsedUrl.host);
+      console.log("  - port:", parsedUrl.port);
+      console.log("  - pathname:", parsedUrl.pathname);
+      console.log("Nock setup:");
+      console.log("  - baseUrl:", baseUrl);
+      console.log("  - path:", parsedUrl.pathname);
+      console.log("  - full mock URL:", baseUrl + parsedUrl.pathname);
+      console.log("Active nock interceptors:", nock.activeMocks());
 
       const scope = nock(baseUrl)
         .post(parsedUrl.pathname, (body: string) => {
+          console.log("Nock interceptor body matcher called with body:", body);
           const params = new URLSearchParams(body);
           const clientAssertion = params.get("client_assertion") as string;
           const decoded = jose.decodeJwt(clientAssertion);
+          console.log("Decoded JWT audience:", decoded.aud);
           expect(decoded.aud).toBe(`${expectedAudience}`);
           return true;
         })
@@ -186,6 +234,8 @@ describe("Credentials", () => {
           access_token: "test-token",
           expires_in: 300,
         });
+
+      console.log("Nock scope created, active mocks:", nock.activeMocks());
 
       const credentials = new Credentials(
         {
@@ -201,7 +251,17 @@ describe("Credentials", () => {
         mockTelemetryConfig,
       );
 
-      await credentials.getAccessTokenHeader();
+      try {
+        await credentials.getAccessTokenHeader();
+        console.log("Request succeeded!");
+        console.log("Scope done?", scope.isDone());
+        console.log("Remaining active mocks:", nock.activeMocks());
+      } catch (error) {
+        console.error("Request failed with error:", error);
+        console.error("Nock pending mocks:", nock.pendingMocks());
+        console.error("Nock active mocks:", nock.activeMocks());
+        throw error;
+      }
 
       expect(scope.isDone()).toBe(true);
     });
