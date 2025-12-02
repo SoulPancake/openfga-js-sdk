@@ -88,20 +88,13 @@ describe("Credentials", () => {
     ])("$description", async ({ apiTokenIssuer, expectedUrl }) => {
       const parsedUrl = new URL(expectedUrl);
 
-      // Set up nock using just protocol://hostname (no port)
-      // Nock will match requests regardless of whether they include the default port
-      const baseUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}`;
-
-      // For non-default ports, we need to include the port
+      // In Node.js 20 with nock v14, we MUST include explicit default ports in the nock setup
+      // because nock internally adds them to its mock registry, even though the actual
+      // HTTP request URLs don't include them
+      const defaultPort = parsedUrl.protocol === "https:" ? "443" : "80";
       const fullBaseUrl = parsedUrl.port
         ? `${parsedUrl.protocol}//${parsedUrl.hostname}:${parsedUrl.port}`
-        : baseUrl;
-
-      // Log for debugging CI issues
-      if (process.env.CI) {
-        console.log(`[TEST] Setting up nock for: ${fullBaseUrl}${parsedUrl.pathname}${parsedUrl.search}`);
-        console.log(`[TEST] Active mocks before: ${nock.activeMocks()}`);
-      }
+        : `${parsedUrl.protocol}//${parsedUrl.hostname}:${defaultPort}`;
 
       const scope = nock(fullBaseUrl)
         .post(parsedUrl.pathname + parsedUrl.search)
@@ -109,10 +102,6 @@ describe("Credentials", () => {
           access_token: "test-token",
           expires_in: 300,
         });
-
-      if (process.env.CI) {
-        console.log(`[TEST] Active mocks after: ${nock.activeMocks()}`);
-      }
 
       const credentials = new Credentials(
         {
@@ -128,20 +117,7 @@ describe("Credentials", () => {
         mockTelemetryConfig,
       );
 
-      try {
-        await credentials.getAccessTokenHeader();
-
-        if (process.env.CI) {
-          console.log(`[TEST] Request succeeded. Scope done: ${scope.isDone()}`);
-        }
-      } catch (error: any) {
-        if (process.env.CI) {
-          console.error(`[TEST] Request failed: ${error.message}`);
-          console.error(`[TEST] Pending mocks: ${nock.pendingMocks()}`);
-          console.error(`[TEST] Active mocks: ${nock.activeMocks()}`);
-        }
-        throw error;
-      }
+      await credentials.getAccessTokenHeader();
 
       expect(scope.isDone()).toBe(true);
     });
@@ -197,20 +173,13 @@ describe("Credentials", () => {
     ])("should normalize audience from apiTokenIssuer when using PrivateKeyJWT client credentials ($description)", async ({ apiTokenIssuer, expectedUrl, expectedAudience }) => {
       const parsedUrl = new URL(expectedUrl);
 
-      // Set up nock using just protocol://hostname (no port)
-      // Nock will match requests regardless of whether they include the default port
-      const baseUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}`;
-
-      // For non-default ports, we need to include the port
+      // In Node.js 20 with nock v14, we MUST include explicit default ports in the nock setup
+      // because nock internally adds them to its mock registry, even though the actual
+      // HTTP request URLs don't include them
+      const defaultPort = parsedUrl.protocol === "https:" ? "443" : "80";
       const fullBaseUrl = parsedUrl.port
         ? `${parsedUrl.protocol}//${parsedUrl.hostname}:${parsedUrl.port}`
-        : baseUrl;
-
-      // Log for debugging CI issues
-      if (process.env.CI) {
-        console.log(`[TEST JWT] Setting up nock for: ${fullBaseUrl}${parsedUrl.pathname}`);
-        console.log(`[TEST JWT] Active mocks before: ${nock.activeMocks()}`);
-      }
+        : `${parsedUrl.protocol}//${parsedUrl.hostname}:${defaultPort}`;
 
       const scope = nock(fullBaseUrl)
         .post(parsedUrl.pathname, (body: string) => {
@@ -224,10 +193,6 @@ describe("Credentials", () => {
           access_token: "test-token",
           expires_in: 300,
         });
-
-      if (process.env.CI) {
-        console.log(`[TEST JWT] Active mocks after: ${nock.activeMocks()}`);
-      }
 
       const credentials = new Credentials(
         {
@@ -243,20 +208,7 @@ describe("Credentials", () => {
         mockTelemetryConfig,
       );
 
-      try {
-        await credentials.getAccessTokenHeader();
-
-        if (process.env.CI) {
-          console.log(`[TEST JWT] Request succeeded. Scope done: ${scope.isDone()}`);
-        }
-      } catch (error: any) {
-        if (process.env.CI) {
-          console.error(`[TEST JWT] Request failed: ${error.message}`);
-          console.error(`[TEST JWT] Pending mocks: ${nock.pendingMocks()}`);
-          console.error(`[TEST JWT] Active mocks: ${nock.activeMocks()}`);
-        }
-        throw error;
-      }
+      await credentials.getAccessTokenHeader();
 
       expect(scope.isDone()).toBe(true);
     });

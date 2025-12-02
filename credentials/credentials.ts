@@ -191,11 +191,6 @@ export class Credentials {
     const url = this.buildApiTokenUrl(clientCredentials.apiTokenIssuer);
     const credentialsPayload = await this.buildClientAuthenticationPayload();
 
-    // Debug logging for CI
-    if (process.env.CI) {
-      console.log(`[Credentials] Making request to: ${url}`);
-    }
-
     try {
       const wrappedResponse = await attemptHttpRequest<ClientSecretRequest|ClientAssertionRequest, {
         access_token: string,
