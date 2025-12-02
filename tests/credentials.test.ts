@@ -12,15 +12,12 @@ import {
 } from "./helpers/default-config";
 import {FgaValidationError} from "../errors";
 
+// Ensure nock is active and network connections are disabled
 nock.disableNetConnect();
+nock.cleanAll();
 
 describe("Credentials", () => {
   const mockTelemetryConfig: TelemetryConfiguration = new TelemetryConfiguration({});
-
-  // Create axios instance with explicit http/https adapter for nock compatibility
-  const axiosInstance = axios.create({
-    adapter: "http" // Force Node.js http/https adapter that nock can intercept
-  });
 
   describe("Refreshing access token", () => {
     afterEach(() => {
@@ -91,25 +88,31 @@ describe("Credentials", () => {
     ])("$description", async ({ apiTokenIssuer, expectedUrl }) => {
       const parsedUrl = new URL(expectedUrl);
 
-      // IMPORTANT: In Node.js 20 and earlier, nock's @mswjs/interceptors sees requests
-      // with explicit default ports (443 for HTTPS, 80 for HTTP).
-      // We must include the port in the nock base URL to match what the interceptor sees.
-      let baseUrl;
-      if (parsedUrl.port) {
-        // Non-default port: include it
-        baseUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}:${parsedUrl.port}`;
-      } else {
-        // Default port: include it explicitly to match what nock's interceptor sees
-        const defaultPort = parsedUrl.protocol === "https:" ? "443" : "80";
-        baseUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}:${defaultPort}`;
+      // Set up nock using just protocol://hostname (no port)
+      // Nock will match requests regardless of whether they include the default port
+      const baseUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}`;
+
+      // For non-default ports, we need to include the port
+      const fullBaseUrl = parsedUrl.port
+        ? `${parsedUrl.protocol}//${parsedUrl.hostname}:${parsedUrl.port}`
+        : baseUrl;
+
+      // Log for debugging CI issues
+      if (process.env.CI) {
+        console.log(`[TEST] Setting up nock for: ${fullBaseUrl}${parsedUrl.pathname}${parsedUrl.search}`);
+        console.log(`[TEST] Active mocks before: ${nock.activeMocks()}`);
       }
 
-      const scope = nock(baseUrl)
+      const scope = nock(fullBaseUrl)
         .post(parsedUrl.pathname + parsedUrl.search)
         .reply(200, {
           access_token: "test-token",
           expires_in: 300,
         });
+
+      if (process.env.CI) {
+        console.log(`[TEST] Active mocks after: ${nock.activeMocks()}`);
+      }
 
       const credentials = new Credentials(
         {
@@ -121,11 +124,24 @@ describe("Credentials", () => {
             clientSecret: OPENFGA_CLIENT_SECRET,
           },
         } as AuthCredentialsConfig,
-        axiosInstance,
+        axios, // Use global axios instance that nock can intercept
         mockTelemetryConfig,
       );
 
-      await credentials.getAccessTokenHeader();
+      try {
+        await credentials.getAccessTokenHeader();
+
+        if (process.env.CI) {
+          console.log(`[TEST] Request succeeded. Scope done: ${scope.isDone()}`);
+        }
+      } catch (error: any) {
+        if (process.env.CI) {
+          console.error(`[TEST] Request failed: ${error.message}`);
+          console.error(`[TEST] Pending mocks: ${nock.pendingMocks()}`);
+          console.error(`[TEST] Active mocks: ${nock.activeMocks()}`);
+        }
+        throw error;
+      }
 
       expect(scope.isDone()).toBe(true);
     });
@@ -154,7 +170,7 @@ describe("Credentials", () => {
             clientSecret: OPENFGA_CLIENT_SECRET,
           },
         } as AuthCredentialsConfig,
-        axiosInstance,
+        axios, // Use global axios instance that nock can intercept
         mockTelemetryConfig,
       )).toThrow(FgaValidationError);
     });
@@ -181,20 +197,22 @@ describe("Credentials", () => {
     ])("should normalize audience from apiTokenIssuer when using PrivateKeyJWT client credentials ($description)", async ({ apiTokenIssuer, expectedUrl, expectedAudience }) => {
       const parsedUrl = new URL(expectedUrl);
 
-      // IMPORTANT: In Node.js 20 and earlier, nock's @mswjs/interceptors sees requests
-      // with explicit default ports (443 for HTTPS, 80 for HTTP).
-      // We must include the port in the nock base URL to match what the interceptor sees.
-      let baseUrl;
-      if (parsedUrl.port) {
-        // Non-default port: include it
-        baseUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}:${parsedUrl.port}`;
-      } else {
-        // Default port: include it explicitly to match what nock's interceptor sees
-        const defaultPort = parsedUrl.protocol === "https:" ? "443" : "80";
-        baseUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}:${defaultPort}`;
+      // Set up nock using just protocol://hostname (no port)
+      // Nock will match requests regardless of whether they include the default port
+      const baseUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}`;
+
+      // For non-default ports, we need to include the port
+      const fullBaseUrl = parsedUrl.port
+        ? `${parsedUrl.protocol}//${parsedUrl.hostname}:${parsedUrl.port}`
+        : baseUrl;
+
+      // Log for debugging CI issues
+      if (process.env.CI) {
+        console.log(`[TEST JWT] Setting up nock for: ${fullBaseUrl}${parsedUrl.pathname}`);
+        console.log(`[TEST JWT] Active mocks before: ${nock.activeMocks()}`);
       }
 
-      const scope = nock(baseUrl)
+      const scope = nock(fullBaseUrl)
         .post(parsedUrl.pathname, (body: string) => {
           const params = new URLSearchParams(body);
           const clientAssertion = params.get("client_assertion") as string;
@@ -207,6 +225,10 @@ describe("Credentials", () => {
           expires_in: 300,
         });
 
+      if (process.env.CI) {
+        console.log(`[TEST JWT] Active mocks after: ${nock.activeMocks()}`);
+      }
+
       const credentials = new Credentials(
         {
           method: CredentialsMethod.ClientCredentials,
@@ -217,11 +239,24 @@ describe("Credentials", () => {
             clientAssertionSigningKey: OPENFGA_CLIENT_ASSERTION_SIGNING_KEY,
           },
         } as AuthCredentialsConfig,
-        axiosInstance,
+        axios, // Use global axios instance that nock can intercept
         mockTelemetryConfig,
       );
 
-      await credentials.getAccessTokenHeader();
+      try {
+        await credentials.getAccessTokenHeader();
+
+        if (process.env.CI) {
+          console.log(`[TEST JWT] Request succeeded. Scope done: ${scope.isDone()}`);
+        }
+      } catch (error: any) {
+        if (process.env.CI) {
+          console.error(`[TEST JWT] Request failed: ${error.message}`);
+          console.error(`[TEST JWT] Pending mocks: ${nock.pendingMocks()}`);
+          console.error(`[TEST JWT] Active mocks: ${nock.activeMocks()}`);
+        }
+        throw error;
+      }
 
       expect(scope.isDone()).toBe(true);
     });
