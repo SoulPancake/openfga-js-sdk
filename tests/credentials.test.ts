@@ -85,11 +85,17 @@ describe("Credentials", () => {
     ])("$description", async ({ apiTokenIssuer, expectedUrl }) => {
       const parsedUrl = new URL(expectedUrl);
 
-      // Nock requires explicit port matching in some environments
-      // For default ports, try matching with explicit port included
-      const defaultPort = parsedUrl.protocol === "https:" ? "443" : "80";
-      const portToUse = parsedUrl.port || defaultPort;
-      const baseUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}:${portToUse}`;
+      // CRITICAL: Do NOT include default ports (443 for HTTPS, 80 for HTTP) in the base URL
+      // because axios/Node.js URL.toString() omits them, but nock's interceptor sees them
+      // in the format "hostname:port/path". We need to match what the actual HTTP request uses.
+      let baseUrl;
+      if (parsedUrl.port) {
+        // Non-default port: include it
+        baseUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}:${parsedUrl.port}`;
+      } else {
+        // Default port: omit it to match axios behavior
+        baseUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}`;
+      }
 
       // Extensive logging for CI debugging
       console.log("=== Token Refresh Test Debug Info ===");
@@ -197,11 +203,17 @@ describe("Credentials", () => {
     ])("should normalize audience from apiTokenIssuer when using PrivateKeyJWT client credentials ($description)", async ({ apiTokenIssuer, expectedUrl, expectedAudience }) => {
       const parsedUrl = new URL(expectedUrl);
 
-      // Nock requires explicit port matching in some environments
-      // For default ports, try matching with explicit port included
-      const defaultPort = parsedUrl.protocol === "https:" ? "443" : "80";
-      const portToUse = parsedUrl.port || defaultPort;
-      const baseUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}:${portToUse}`;
+      // CRITICAL: Do NOT include default ports (443 for HTTPS, 80 for HTTP) in the base URL
+      // because axios/Node.js URL.toString() omits them, but nock's interceptor sees them
+      // in the format "hostname:port/path". We need to match what the actual HTTP request uses.
+      let baseUrl;
+      if (parsedUrl.port) {
+        // Non-default port: include it
+        baseUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}:${parsedUrl.port}`;
+      } else {
+        // Default port: omit it to match axios behavior
+        baseUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}`;
+      }
 
       // Extensive logging for CI debugging
       console.log("=== PrivateKeyJWT Test Debug Info ===");

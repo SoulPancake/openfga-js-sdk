@@ -95,15 +95,37 @@ The `attemptHttpRequest` function logs:
 
 ## Key Insights from Logs
 
-The logs reveal the core issue:
+The logs revealed the ACTUAL issue (confirmed from CI):
 
-1. **Nock mock URL**: `https://issuer.fga.example:443/oauth/token` (with explicit port)
-2. **Actual request URL**: `https://issuer.fga.example/oauth/token` (without port)
+1. **Nock mock was set up with**: `POST https://issuer.fga.example:443/oauth/token` (with explicit port `:443`)
+2. **Actual axios request**: `https://issuer.fga.example/oauth/token` (WITHOUT port, because it's default)
+3. **Nock interceptor sees**: `"issuer.fga.example:443/oauth/token"` (hostname WITH port in the connection string)
 
-This mismatch occurs because:
-- Node.js's `URL.toString()` omits default ports (443 for HTTPS, 80 for HTTP)
-- In CI environments, the HTTP client or interceptor includes the port explicitly
-- This causes nock's URL matching to fail
+The mismatch occurs because:
+- Node.js's `URL.toString()` **omits** default ports (443 for HTTPS, 80 for HTTP)
+- Axios passes the URL without the port to the HTTP library
+- But internally, the HTTP connection is made to `hostname:443`
+- Nock's interceptor captures this as `"issuer.fga.example:443/oauth/token"`
+- When nock base URL includes `:443`, it doesn't match because nock is looking for `"issuer.fga.example:443:443/oauth/token"` (double port!)
+
+## Solution
+
+**DO NOT include default ports in the nock base URL**. Only include ports when they are non-default.
+
+```typescript
+let baseUrl;
+if (parsedUrl.port) {
+  // Non-default port: include it
+  baseUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}:${parsedUrl.port}`;
+} else {
+  // Default port: omit it to match axios behavior
+  baseUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}`;
+}
+```
+
+This way:
+- For `https://example.com/path`: nock base = `https://example.com` → matches `"example.com:443/path"`
+- For `https://example.com:8080/path`: nock base = `https://example.com:8080` → matches `"example.com:8080/path"`
 
 ## Using the Logs
 
