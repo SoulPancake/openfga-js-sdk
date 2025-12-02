@@ -15,14 +15,35 @@ describe("Credentials", () => {
   const mockTelemetryConfig: TelemetryConfiguration = new TelemetryConfiguration({});
 
   beforeAll(() => {
+    // Clean up any MSW interceptors that might interfere
+    const http = require('http');
+    const https = require('https');
+
+    // Store original agents
+    const originalHttpAgent = http.globalAgent;
+    const originalHttpsAgent = https.globalAgent;
+
+    // Reset to ensure clean state
+    http.globalAgent = new http.Agent();
+    https.globalAgent = new https.Agent();
+
+    nock.cleanAll();
+    nock.restore();
+    nock.activate();
     nock.disableNetConnect();
   });
 
   afterAll(() => {
+    nock.cleanAll();
+    nock.restore();
     nock.enableNetConnect();
   });
 
   describe("Refreshing access token", () => {
+    beforeEach(() => {
+      nock.cleanAll();
+    });
+
     afterEach(() => {
       nock.cleanAll();
     });
