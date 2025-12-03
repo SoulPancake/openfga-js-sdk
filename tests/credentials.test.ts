@@ -87,14 +87,13 @@ describe("Credentials", () => {
     ])("$description", async ({ apiTokenIssuer, expectedUrl }) => {
       const parsedUrl = new URL(expectedUrl);
 
-      // Match the exact pattern from tests/helpers/nocks.ts:tokenExchange
-      // which works in CI - use protocol://hostname (no port for defaults)
       const baseUrl = parsedUrl.port
         ? `${parsedUrl.protocol}//${parsedUrl.hostname}:${parsedUrl.port}`
         : `${parsedUrl.protocol}//${parsedUrl.hostname}`;
 
       const scope = nock(baseUrl, {
-        reqheaders: { "Content-Type": "application/x-www-form-urlencoded" }
+        // Use regex to match "application/x-www-form-urlencoded" OR "...;charset=utf-8"
+        reqheaders: { "Content-Type": /application\/x-www-form-urlencoded/ }
       })
         .post(parsedUrl.pathname + parsedUrl.search)
         .reply(200, {
@@ -112,7 +111,7 @@ describe("Credentials", () => {
             clientSecret: OPENFGA_CLIENT_SECRET,
           },
         } as AuthCredentialsConfig,
-        axios, // Use global axios instance that nock can intercept
+        axios,
         mockTelemetryConfig,
       );
 
@@ -145,7 +144,7 @@ describe("Credentials", () => {
             clientSecret: OPENFGA_CLIENT_SECRET,
           },
         } as AuthCredentialsConfig,
-        axios, // Use global axios instance that nock can intercept
+        axios,
         mockTelemetryConfig,
       )).toThrow(FgaValidationError);
     });
@@ -172,14 +171,13 @@ describe("Credentials", () => {
     ])("should normalize audience from apiTokenIssuer when using PrivateKeyJWT client credentials ($description)", async ({ apiTokenIssuer, expectedUrl, expectedAudience }) => {
       const parsedUrl = new URL(expectedUrl);
 
-      // Match the exact pattern from tests/helpers/nocks.ts:tokenExchange
-      // which works in CI - use protocol://hostname (no port for defaults)
       const baseUrl = parsedUrl.port
         ? `${parsedUrl.protocol}//${parsedUrl.hostname}:${parsedUrl.port}`
         : `${parsedUrl.protocol}//${parsedUrl.hostname}`;
 
       const scope = nock(baseUrl, {
-        reqheaders: { "Content-Type": "application/x-www-form-urlencoded" }
+        // Use regex here as well
+        reqheaders: { "Content-Type": /application\/x-www-form-urlencoded/ }
       })
         .post(parsedUrl.pathname, (body: string) => {
           const params = new URLSearchParams(body);
@@ -203,7 +201,7 @@ describe("Credentials", () => {
             clientAssertionSigningKey: OPENFGA_CLIENT_ASSERTION_SIGNING_KEY,
           },
         } as AuthCredentialsConfig,
-        axios, // Use global axios instance that nock can intercept
+        axios,
         mockTelemetryConfig,
       );
 
