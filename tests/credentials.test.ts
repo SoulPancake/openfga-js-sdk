@@ -14,6 +14,7 @@ import { FgaValidationError } from "../errors";
 
 // Ensure nock is active and network connections are disabled
 nock.disableNetConnect();
+nock.activate();
 
 describe("Credentials", () => {
   const mockTelemetryConfig: TelemetryConfiguration = new TelemetryConfiguration({});
@@ -22,6 +23,7 @@ describe("Credentials", () => {
     // Clean up before and after to ensure no cross-test pollution
     beforeEach(() => {
       nock.cleanAll();
+      nock.activate();
     });
 
     afterEach(() => {
@@ -96,8 +98,6 @@ describe("Credentials", () => {
         ? `${parsedUrl.protocol}//${parsedUrl.hostname}:${parsedUrl.port}`
         : `${parsedUrl.protocol}//${parsedUrl.hostname}`;
 
-      // FIX: Removed strict reqheaders check.
-      // This prevents failures if axios/MSW adds ";charset=utf-8" or other headers in CI.
       const scope = nock(baseUrl)
         .post(parsedUrl.pathname + parsedUrl.search)
         .reply(200, {
@@ -115,7 +115,7 @@ describe("Credentials", () => {
             clientSecret: OPENFGA_CLIENT_SECRET,
           },
         } as AuthCredentialsConfig,
-        axios, // Use global axios instance that nock can intercept
+        axios,
         mockTelemetryConfig,
       );
 
