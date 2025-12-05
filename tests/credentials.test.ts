@@ -12,6 +12,16 @@ import {
 } from "./helpers/default-config";
 import { FgaValidationError } from "../errors";
 
+// Disable MSW interceptors if they're active
+try {
+  const { BatchInterceptor } = require('@mswjs/interceptors');
+  const { ClientRequestInterceptor } = require('@mswjs/interceptors/ClientRequest');
+  const interceptor = new BatchInterceptor([new ClientRequestInterceptor()]);
+  interceptor.dispose();
+} catch (e) {
+  // MSW not present or already disposed
+}
+
 // Ensure nock is active and network connections are disabled
 nock.disableNetConnect();
 
@@ -29,6 +39,7 @@ describe("Credentials", () => {
     });
 
     test.each([
+      // ... rest of your tests
       {
         description: "should use default scheme and token endpoint path when apiTokenIssuer has no scheme and no path",
         apiTokenIssuer: "issuer.fga.example",
