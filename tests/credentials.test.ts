@@ -14,7 +14,6 @@ import { FgaValidationError } from "../errors";
 
 // Ensure nock is active and network connections are disabled
 nock.disableNetConnect();
-nock.activate();
 
 describe("Credentials", () => {
   const mockTelemetryConfig: TelemetryConfiguration = new TelemetryConfiguration({});
@@ -23,7 +22,6 @@ describe("Credentials", () => {
     // Clean up before and after to ensure no cross-test pollution
     beforeEach(() => {
       nock.cleanAll();
-      nock.activate();
     });
 
     afterEach(() => {
@@ -100,6 +98,7 @@ describe("Credentials", () => {
 
       const scope = nock(baseUrl)
         .post(parsedUrl.pathname + parsedUrl.search)
+        .matchHeader('content-type', /^application\/x-www-form-urlencoded/)
         .reply(200, {
           access_token: "test-token",
           expires_in: 300,
@@ -187,6 +186,7 @@ describe("Credentials", () => {
           expect(decoded.aud).toBe(`${expectedAudience}`);
           return true;
         })
+        .matchHeader('content-type', /^application\/x-www-form-urlencoded/)
         .reply(200, {
           access_token: "test-token",
           expires_in: 300,
